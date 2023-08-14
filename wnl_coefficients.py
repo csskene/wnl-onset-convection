@@ -172,7 +172,7 @@ problem.add_equation("T(r=r_inner) = 0")
 problem.add_equation("u(r=r_outer) = 0")
 problem.add_equation("T(r=r_outer) = 0")
 
-solver = problem.build_solver(ncc_cutoff=1e-10)
+solver = problem.build_solver(ncc_cutoff=1e-6)
 
 logger.info('Solving for uAAbar')
 u['g'] = 0
@@ -203,7 +203,7 @@ problem.add_equation("T(r=r_inner) = 0")
 problem.add_equation("u(r=r_outer) = 0")
 problem.add_equation("T(r=r_outer) = 0")
 
-solver = problem.build_solver(ncc_cutoff=1e-10)
+solver = problem.build_solver(ncc_cutoff=1e-6)
 
 subproblem = solver.subproblems_by_group[(2*mc, None, None)]
 
