@@ -124,10 +124,16 @@ with h5py.File('{0:s}/eigenvector/eigenvector_s1.h5'.format(file_dir), mode='r')
 uA = u.copy()
 TA = T.copy()
 
-uconj = uA.copy()
-uconj['g'] = uA['g'].real
-norm = (0.5*d3.integ(uconj@uconj)).evaluate()['g'][0,0,0]
+ureal = uA.copy()
+ureal['g'] = uA['g'].real
+norm = (0.5*d3.integ(ureal@ureal)).evaluate()['g'][0,0,0]
 logger.info('norm = %f' % norm.real )
+
+## Check energy balance
+D_nu = np.max(d3.integ(d3.dot(ureal,d3.lap(ureal))).evaluate()['g'])
+strain = 0.5*(d3.grad(ureal) + d3.trans(d3.grad(ureal)))
+De = 2*np.max(d3.integ(d3.trace(strain@strain)).evaluate()['g'])
+logger.info('Residual = {0:g}'.format(np.abs(D_nu+De)/np.abs(D_nu)))
 
 uAbar = uA.copy()
 uAbar['g'] = np.conj(uA['g'])
