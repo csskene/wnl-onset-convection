@@ -133,7 +133,7 @@ logger.info('norm = %f' % norm.real )
 D_nu = np.max(d3.integ(d3.dot(ureal,d3.lap(ureal))).evaluate()['g'])
 strain = 0.5*(d3.grad(ureal) + d3.trans(d3.grad(ureal)))
 De = 2*np.max(d3.integ(d3.trace(strain@strain)).evaluate()['g'])
-logger.info('Residual = {0:g}'.format(np.abs(D_nu+De)/np.abs(D_nu)))
+logger.info('Residual = {0:g}'.format(np.abs(D_nu+De)/np.max([np.abs(De),np.abs(D_nu)])))
 
 uAbar = uA.copy()
 uAbar['g'] = np.conj(uA['g'])
