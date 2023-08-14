@@ -71,7 +71,7 @@ vol = 4*np.pi/3*(r_outer**3-r_inner**3)
 
 c = d3.SphericalCoordinates('phi', 'theta', 'r')
 d = d3.Distributor((c,), dtype=np.complex128,comm=MPI.COMM_SELF)
-b = d3.ShellBasis(c, (2*(mc+1),Lmax+1,Nmax+1), radii=radii, dealias=(3/2,3/2,3/2),dtype=np.complex128)
+b = d3.ShellBasis(c, (2*(2*mc+1),Lmax+1,Nmax+1), radii=radii, dealias=(3/2,3/2,3/2),dtype=np.complex128)
 s2_basis = b.S2_basis()
 
 b_inner = b.S2_basis(radius=r_inner)
