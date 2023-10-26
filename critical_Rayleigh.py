@@ -12,6 +12,7 @@ Options:
     --m_min=<m_min>               Starting m [default: 1]
     --m_max=<m_max>               Final m [default: 10]
     --target=<target>             Target frequency [default: -0.2]
+    --Prandtl=<Prandtl>           Prandtl number [default: 1]
 """
 
 import numpy as np
@@ -40,7 +41,7 @@ m_min        = int(args['--m_min'])
 m_max        = int(args['--m_max'])
 target       = float(args['--target'])*1j
 
-Prandtl = 1
+Prandtl =  float(args['--Prandtl'])
 
 r_inner = 7/13
 r_outer = 20/13
@@ -49,7 +50,7 @@ radii = (r_inner,r_outer)
 vol = 4*np.pi/3*(r_outer**3-r_inner**3)
 
 # Create output directory
-file_dir = 'Ekman_{0:g}'.format(Ekman)
+file_dir = 'Ekman_{0:g}_Prandtl_{1:g}'.format(Ekman,Prandtl)
 if not os.path.exists(file_dir):
     os.mkdir(file_dir)
 
