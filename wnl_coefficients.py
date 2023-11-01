@@ -8,6 +8,7 @@ Options:
     --Lmax=<Lmax>                 Lmax resolution for simulation [default: 43]
     --Nmax=<Nmax>                 Nmax resolution for simulation [default: 48]
     --Ekman=<Ekman>               Ekman number [default: 1e-3]
+    --Prandtl=<Prandtl>           Prandtl number [default: 1]
 """
 
 import numpy as np
@@ -34,9 +35,10 @@ args = docopt(__doc__)
 Lmax             = int(args['--Lmax'])
 Nmax             = int(args['--Nmax'])
 Ekman            = float(args['--Ekman'])
-Prandtl = 1
+Prandtl          = float(args['--Prandtl'])
 
-file_dir = 'Ekman_{0:g}'.format(Ekman)
+# file_dir = 'Ekman_{0:g}'.format(Ekman)
+file_dir = 'Ekman_{0:g}_Prandtl_{1:g}'.format(Ekman,Prandtl)
 
 data = np.load('{0:s}/results.npz'.format(file_dir))
 
@@ -283,5 +285,5 @@ output_handler.add_task(chi_T,name='chi_T')
 output_evaluator.evaluate_handlers(output_evaluator.handlers, timestep=0, wall_time=0, sim_time=0, iteration=0)
 #, index=[1e-3],columns=['gamma_AA','gamma_AA_u','gamma_AA_T','gamma_AAbar','gamma_AAbar_u','gamma_AAbar_T','chi']
 df = pd.DataFrame(np.array([gamma_AA,gamma_AA_u,gamma_AA_T,gamma_AAbar,gamma_AAbar_u,gamma_AAbar_T,chi]),index=['gamma_AA','gamma_AA_u','gamma_AA_T','gamma_AAbar','gamma_AAbar_u','gamma_AAbar_T','chi'],columns=[Ekman])
-
+print(df)
 df.to_csv('{0:s}/wnl_coefficients.csv'.format(file_dir))
