@@ -13,6 +13,7 @@ Options:
     --m_max=<m_max>               Final m [default: 10]
     --target=<target>             Target frequency [default: -0.2]
     --Prandtl=<Prandtl>           Prandtl number [default: 1]
+    --beta=<beta>                 Radius ratio [default: 0.35]
 """
 
 import numpy as np
@@ -42,15 +43,16 @@ m_max        = int(args['--m_max'])
 target       = float(args['--target'])*1j
 
 Prandtl =  float(args['--Prandtl'])
+beta =  float(args['--beta'])
 
-r_inner = 7/13
-r_outer = 20/13
+r_outer = 1/(1-beta)
+r_inner = r_outer - 1
 radii = (r_inner,r_outer)
 
 vol = 4*np.pi/3*(r_outer**3-r_inner**3)
 
 # Create output directory
-file_dir = 'Ekman_{0:g}_Prandtl_{1:g}'.format(Ekman,Prandtl)
+file_dir = 'Ekman_{0:g}_Prandtl_{1:g}_beta_{2:g}'.format(Ekman,Prandtl,beta)
 if not os.path.exists(file_dir):
     os.mkdir(file_dir)
 

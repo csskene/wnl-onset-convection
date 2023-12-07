@@ -9,6 +9,7 @@ Options:
     --Nmax=<Nmax>                 Nmax resolution for simulation [default: 48]
     --Ekman=<Ekman>               Ekman number [default: 1e-3]
     --Prandtl=<Prandtl>           Prandtl number [default: 1]
+    --beta=<beta>                 Radius ratio [default: 0.35]
 """
 
 import numpy as np
@@ -37,8 +38,13 @@ Nmax             = int(args['--Nmax'])
 Ekman            = float(args['--Ekman'])
 Prandtl          = float(args['--Prandtl'])
 
+beta =  float(args['--beta'])
+
+r_outer = 1/(1-beta)
+r_inner = r_outer - 1
+
 # file_dir = 'Ekman_{0:g}'.format(Ekman)
-file_dir = 'Ekman_{0:g}_Prandtl_{1:g}'.format(Ekman,Prandtl)
+file_dir = 'Ekman_{0:g}_Prandtl_{1:g}_beta_{2:g}'.format(Ekman,Prandtl,beta)
 
 data = np.load('{0:s}/results.npz'.format(file_dir))
 
