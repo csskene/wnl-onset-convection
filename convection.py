@@ -14,6 +14,7 @@ Options:
 import numpy as np
 import dedalus.public as d3
 import os 
+from pathlib import Path
 import h5py
 import pandas as pd
 
@@ -57,7 +58,7 @@ idx = np.argmin(data['Ra'])
 mc = data['ms'][idx]
 Rayleigh = data['Ra'][idx]*(1+eps**2)
 
-stop_time = 100
+stop_time = 100000
 
 r_inner = 7/13
 r_outer = 20/13
@@ -120,6 +121,7 @@ reducer = GlobalArrayReducer(MPI.COMM_WORLD)
 
 norm = reducer.global_max((0.5*d3.integ(u@u)).evaluate()['g'])
 u['g'] /= np.sqrt(norm/(0.1*predicted_amplitude))
+T['g'] /= np.sqrt(norm/(0.1*predicted_amplitude))
 norm = reducer.global_max((0.5*d3.integ(u@u)).evaluate()['g'])
 logger.info('norm = %g' % norm.real )
 ########################################
@@ -144,7 +146,7 @@ problem.add_equation("u(r=r_outer) = 0")
 problem.add_equation("T(r=r_outer) = 0")
 
 # Solver
-solver = problem.build_solver(d3.SBDF2)
+solver = problem.build_solver(d3.SBDF4)
 logger.info("Problem built")
 
 solver.stop_sim_time = stop_time
@@ -152,13 +154,18 @@ solver.stop_sim_time = stop_time
 flow = d3.GlobalFlowProperty(solver, cadence=100)
 flow.add_property(d3.dot(u,u)/2., name='KE')
 
-max_dt = 1e-4
+max_dt = 0.1
 CFL = d3.CFL(solver, initial_dt=max_dt, cadence=10, safety=0.8, threshold=0.1,
              max_change=1.5, min_change=0.5, max_dt=max_dt)
 CFL.add_velocity(u)
 
-timeseries = solver.evaluator.add_file_handler('{0:s}/verification'.format(file_dir),sim_dt=2e-4)
-timeseries.add_task('d3.integ(d3.dot(u,u))/2',name='KE')
+file_name='verification_eps_{0:.2f}'.format(eps)
+
+if MPI.COMM_WORLD.rank == 0:
+    if not os.path.exists(os.path.join(file_dir,file_name)):
+        os.mkdir(os.path.join(file_dir,file_name))
+timeseries = solver.evaluator.add_file_handler(os.path.join(file_dir,file_name,'timeseries'),sim_dt=2e-7)
+timeseries.add_task(d3.integ(d3.dot(u,u))/2,name='KE')
 
 good_solution = True
 

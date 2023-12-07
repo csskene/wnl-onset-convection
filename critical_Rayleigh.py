@@ -100,6 +100,10 @@ rvec['g'][2] = r
 
 lift_basis = b.clone_with(k=1) # First derivative basis
 lift = lambda A, n: d3.Lift(A, lift_basis, n)
+
+lift_basis2 = b.clone_with(k=2) # Second derivative basis                                                                                                         
+lift2 = lambda A, n: d3.Lift(A, lift_basis2, n)
+
 integ = lambda A: d3.Integrate(A, c)
 grad_u = d3.grad(u) + rvec*lift(tau_u1,-1) # First-order reduction
 grad_T = d3.grad(T) + rvec*lift(tau_T1,-1) # First-order reduction
@@ -108,8 +112,8 @@ om = d.Field(name='om')
 # Hydro only
 problem = d3.EVP([p, u, T, tau_u1,tau_u2,tau_T1,tau_T2,tau_p],eigenvalue=om, namespace=locals())
 problem.add_equation("trace(grad_u) + tau_p= 0")
-problem.add_equation("om*u - Ekman*div(grad_u) + grad(p) + lift(tau_u2,-1) - Rayleigh*Ekman*r_vec*T + 2*cross(ez, u) =  0")
-problem.add_equation("om*T - Ekman/Prandtl*div(grad_T) + lift(tau_T2,-1) + dot(u,grad(T0)) = 0")
+problem.add_equation("om*u - Ekman*div(grad_u) + grad(p) + lift2(tau_u2,-1) - Rayleigh*Ekman*r_vec*T + 2*cross(ez, u) =  0")
+problem.add_equation("om*T - Ekman/Prandtl*div(grad_T) + lift2(tau_T2,-1) + dot(u,grad(T0)) = 0")
 problem.add_equation("integ(p)=0")
 problem.add_equation("u(r=r_inner) = 0")
 problem.add_equation("T(r=r_inner) = 0")
