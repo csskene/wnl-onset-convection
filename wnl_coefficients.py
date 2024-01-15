@@ -84,7 +84,7 @@ s2_basis = b.S2_basis()
 
 b_inner = b.S2_basis(radius=r_inner)
 b_outer = b.S2_basis(radius=r_outer)
-phi, theta, r = b.local_grids()
+phi, theta, r = d.local_grids(b)
 
 u = d.VectorField(c,name='u',bases=b)
 p = d.Field(name='p',bases=b)

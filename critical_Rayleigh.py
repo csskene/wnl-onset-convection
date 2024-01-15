@@ -63,7 +63,7 @@ s2_basis = b.S2_basis()
 
 b_inner = b.S2_basis(radius=r_inner)
 b_outer = b.S2_basis(radius=r_outer)
-phi, theta, r = b.local_grids()
+phi, theta, r = d.local_grids(b)
 
 u = d.VectorField(c,name='u',bases=b)
 p = d.Field(name='p',bases=b)
@@ -131,7 +131,7 @@ def cost_grad(Rayleigh_,solver,m,target):
 
     nev = 5
     solver.solve_sparse(subproblem, nev, target,left=True,raise_on_mismatch=False,rebuild_matrices=True)
-    
+    tools._normalize_left_eigenvectors(solver)
     idx = np.argmax(solver.eigenvalues.real)
     tools.set_state_adjoint(solver,idx,subproblem.subsystems[0])
 
@@ -140,6 +140,14 @@ def cost_grad(Rayleigh_,solver,m,target):
         state_adjoint.append(state.copy())
 
     solver.set_state(idx,subproblem.subsystems[0])
+
+    norm = 0
+    for (i,adj_state) in enumerate(state_adjoint):
+        norm += np.vdot(adj_state['c'],solver.state[i]['c'])
+    logger.info('This should be 1 %g' % norm)
+
+    for adj_state in state_adjoint:
+        adj_state['c'] /= np.conj(norm)
     
     grad_ = (Ekman*r_vec*T).evaluate()
     dlambdadRa = np.vdot(state_adjoint[1]['c'],grad_['c'])
@@ -224,8 +232,8 @@ output_handler.add_task(u,name='u')
 output_handler.add_task(T,name='T')
 output_evaluator.evaluate_handlers(output_evaluator.handlers, timestep=0, wall_time=0, sim_time=0, iteration=0)
 
-solver._normalize_left_eigenvectors()
-solver.modified_left_eigenvectors = solver._build_modified_left_eigenvectors()
+tools._normalize_left_eigenvectors(solver)
+# solver.modified_left_eigenvectors = tools._build_modified_left_eigenvectors(solver)
 tools.set_state_adjoint(solver,idx,subproblem.subsystems[0])
 
 output_evaluator_adj = evaluator.Evaluator(d, locals())
