@@ -37,7 +37,7 @@ beta =  float(args['--beta'])
 r_outer = 1/(1-beta)
 r_inner = r_outer - 1
 
-file_dir = 'Ekman_{0:g}_Prandtl_{1:g}_beta_{2:g}'.format(Ekman,Prandtl,beta)
+file_dir = 'data/Ekman_{0:g}_Prandtl_{1:g}_beta_{2:g}'.format(Ekman,Prandtl,beta)
 
 data = np.load('{0:s}/results.npz'.format(file_dir))
 
@@ -123,6 +123,7 @@ if test:
     residual = np.abs(D_nu+De)/np.max([np.abs(De),np.abs(D_nu)])
     logger.info('Residual = {0:g}'.format(residual))
 else:
+    # Complex placeholder until this calculation is run
     residual = None
 
 uAbar = uAm.copy()
@@ -301,6 +302,7 @@ output_evaluator.evaluate_handlers(output_evaluator.handlers, timestep=0, wall_t
 columns = ['gamma','gamma_AA','gamma_AA_u','gamma_AA_T','gamma_AAbar','gamma_AAbar_u','gamma_AAbar_T','chi','residual']
 data = [gamma,gamma_AA,gamma_AA_u,gamma_AA_T,gamma_AAbar,gamma_AAbar_u,gamma_AAbar_T,chi,residual]
 frame_data = dict(zip(columns,data))
+
 df = pd.DataFrame(data=frame_data,index=[Ekman])
 print(df.T)
 df.to_csv('{0:s}/wnl_coefficients.csv'.format(file_dir))

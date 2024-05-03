@@ -51,8 +51,11 @@ radii = (r_inner,r_outer)
 
 vol = 4*np.pi/3*(r_outer**3-r_inner**3)
 
+if not os.path.exists('data'):
+    os.mkdir('data')
+
 # Create output directory
-file_dir = 'Ekman_{0:g}_Prandtl_{1:g}_beta_{2:g}'.format(Ekman,Prandtl,beta)
+file_dir = 'data/Ekman_{0:g}_Prandtl_{1:g}_beta_{2:g}'.format(Ekman,Prandtl,beta)
 if not os.path.exists(file_dir):
     os.mkdir(file_dir)
 
