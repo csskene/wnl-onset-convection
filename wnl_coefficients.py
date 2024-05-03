@@ -10,26 +10,19 @@ Options:
     --Ekman=<Ekman>               Ekman number [default: 1e-3]
     --Prandtl=<Prandtl>           Prandtl number [default: 1]
     --beta=<beta>                 Radius ratio [default: 0.35]
+    --test                        Whether to do the residual test or not
 """
 
 import numpy as np
 import dedalus.public as d3
 
-from mpi4py import MPI
-import time
 import h5py
 import logging
 import dedalus.core.evaluator as evaluator
 from docopt import docopt
 import pandas as pd
 
-restart_file=False
-comm = MPI.COMM_WORLD
-rank = comm.rank
-ncpu = comm.size
-
 logger = logging.getLogger(__name__)
-
 
 args = docopt(__doc__)
 # Parameters
@@ -37,6 +30,7 @@ Lmax             = int(args['--Lmax'])
 Nmax             = int(args['--Nmax'])
 Ekman            = float(args['--Ekman'])
 Prandtl          = float(args['--Prandtl'])
+test             = args['--test']
 
 beta =  float(args['--beta'])
 
@@ -58,7 +52,7 @@ radii = (r_inner,r_outer)
 vol = 4*np.pi/3*(r_outer**3-r_inner**3)
 
 c = d3.SphericalCoordinates('phi', 'theta', 'r')
-d = d3.Distributor((c,), dtype=np.complex128,comm=MPI.COMM_SELF)
+d = d3.Distributor((c,), dtype=np.complex128)
 b = d3.ShellBasis(c, (2*(2*mc+2),Lmax+1,Nmax+1), radii=radii, dealias=(1,1,1),dtype=np.complex128)
 s2_basis = b.S2_basis()
 
@@ -121,11 +115,15 @@ ureal['g'] = uA['g'].real
 norm = (0.5*d3.integ(ureal@ureal)).evaluate()['g'][0,0,0]
 logger.info('norm = %f' % norm.real)
 
-## Check energy balance
-D_nu = np.max(d3.integ(d3.dot(ureal,d3.lap(ureal))).evaluate()['g'])
-strain = 0.5*(d3.grad(ureal) + d3.trans(d3.grad(ureal)))
-De = 2*np.max(d3.integ(d3.trace(strain@strain)).evaluate()['g'])
-logger.info('Residual = {0:g}'.format(np.abs(D_nu+De)/np.max([np.abs(De),np.abs(D_nu)])))
+if test:
+    ## Check energy balance
+    D_nu = np.max(d3.integ(d3.dot(ureal,d3.lap(ureal))).evaluate()['g'])
+    strain = 0.5*(d3.grad(ureal) + d3.trans(d3.grad(ureal)))
+    De = 2*np.max(d3.integ(d3.trace(strain@strain)).evaluate()['g'])
+    residual = np.abs(D_nu+De)/np.max([np.abs(De),np.abs(D_nu)])
+    logger.info('Residual = {0:g}'.format(residual))
+else:
+    residual = None
 
 uAbar = uAm.copy()
 uAbar['g'] = np.conj(uAm['g'])
@@ -152,13 +150,6 @@ logger.info('Check adjoint normalisation = {0:f}'.format(term))
 
 m_field = d.Field(name='m_field',bases=b.meridional_basis)
 m_field['g'] = 1/(r*np.sin(theta))
-#m_field = d.VectorField(c,name='m_field',bases=b)
-#m_field['g'][0] = 1/(r*np.sin(theta))
-
-#m_vec_field = d.TensorField((c,c),name='m_vec_field',bases=b)
-#m_vec_field['g'][0,0] = 1/(r*np.sin(theta))
-#m_vec_field['g'][1,1] = 1/(r*np.sin(theta))
-#m_vec_field['g'][2,2] = 1/(r*np.sin(theta))
 
 e_phi = d.VectorField(c,name='e_phi')
 e_phi['g'][0]=1
@@ -258,8 +249,10 @@ gamma_AA_T = np.vdot(TA_adj['c'],-NL_T_field['c'])
 gamma_AA = gamma_AA_u + gamma_AA_T
 logger.info('gamma_AA={0:g}'.format(gamma_AA))
 
-gamma_u_AA = (-NL_u_field).evaluate().copy()
-gamma_T_AA = (-NL_T_field).evaluate().copy()
+gamma_u_AA = um.copy()
+gamma_T_AA = Tm.copy()
+gamma_u_AA['g'][:,0,:,:] = (-NL_u_field).evaluate()['g'][:,0,:,:]
+gamma_T_AA['g'][0,:,:]  = (-NL_T_field).evaluate()['g'][0,:,:]
 
 NLTerm(uAAbar,uAm,TAAbar,TAm,0,1.*mc)
 gamma_AAbar_u = np.vdot(uA_adj['c'],-NL_u_field['c'])
@@ -267,8 +260,10 @@ gamma_AAbar_T = np.vdot(TA_adj['c'],-NL_T_field['c'])
 gamma_AAbar = gamma_AAbar_u + gamma_AAbar_T 
 logger.info('gamma_AAbar={0:g}'.format(gamma_AAbar))
 
-gamma_u_AAbar = (-NL_u_field).evaluate().copy()
-gamma_T_AAbar = (-NL_T_field).evaluate().copy()
+gamma_u_AAbar = um.copy()
+gamma_T_AAbar = Tm.copy()
+gamma_u_AAbar['g'][:,0,:,:] = (-NL_u_field).evaluate()['g'][:,0,:,:]
+gamma_T_AAbar['g'][0,:,:]  = (-NL_T_field).evaluate()['g'][0,:,:]
 
 gamma = gamma_AA + gamma_AAbar
 logger.info('gamma={0:g}'.format(gamma))
@@ -303,7 +298,9 @@ output_handler.add_task(gamma_T_AAbar,name='gamma_T_AAbar')
 
 output_handler.add_task(chi_u_m,name='chi_u')
 output_evaluator.evaluate_handlers(output_evaluator.handlers, timestep=0, wall_time=0, sim_time=0, iteration=0)
-#, index=[1e-3],columns=['gamma_AA','gamma_AA_u','gamma_AA_T','gamma_AAbar','gamma_AAbar_u','gamma_AAbar_T','chi']
-df = pd.DataFrame(np.array([gamma,gamma_AA,gamma_AA_u,gamma_AA_T,gamma_AAbar,gamma_AAbar_u,gamma_AAbar_T,chi]),index=['gamma','gamma_AA','gamma_AA_u','gamma_AA_T','gamma_AAbar','gamma_AAbar_u','gamma_AAbar_T','chi'],columns=[Ekman])
-print(df)
+columns = ['gamma','gamma_AA','gamma_AA_u','gamma_AA_T','gamma_AAbar','gamma_AAbar_u','gamma_AAbar_T','chi','residual']
+data = [gamma,gamma_AA,gamma_AA_u,gamma_AA_T,gamma_AAbar,gamma_AAbar_u,gamma_AAbar_T,chi,residual]
+frame_data = dict(zip(columns,data))
+df = pd.DataFrame(data=frame_data,index=[Ekman])
+print(df.T)
 df.to_csv('{0:s}/wnl_coefficients.csv'.format(file_dir))
