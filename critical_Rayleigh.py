@@ -9,8 +9,8 @@ Options:
     --Nmax=<Nmax>                 Nmax resolution for simulation [default: 48]
     --Ekman=<Ekman>               Ekman number [default: 1e-3]
     --Rayleigh=<Rayleigh>         Order of magnitude guess for Rayleigh number [default: 45]
-    --m_min=<m_min>               Starting m [default: 1]
-    --m_max=<m_max>               Final m [default: 10]
+    --m_min=<m_min>               Starting m [default: 4]
+    --m_max=<m_max>               Final m [default: 4]
     --target=<target>             Target frequency [default: -0.2]
     --Prandtl=<Prandtl>           Prandtl number [default: 1]
     --beta=<beta>                 Radius ratio [default: 0.35]
@@ -43,7 +43,7 @@ m_max        = int(args['--m_max'])
 target       = float(args['--target'])*1j
 
 Prandtl =  float(args['--Prandtl'])
-beta =  float(args['--beta'])
+beta    =  float(args['--beta'])
 
 r_outer = 1/(1-beta)
 r_inner = r_outer - 1
@@ -67,9 +67,8 @@ phi, theta, r = d.local_grids(b)
 
 u = d.VectorField(c,name='u',bases=b)
 p = d.Field(name='p',bases=b)
-φ = d.Field(name='φ',bases=b)
 T = d.Field(name='T',bases=b)
-T0 = d.Field(name='T',bases=b.meridional_basis)
+T0 = d.Field(name='T0',bases=b.meridional_basis)
 
 tau_u1 = d.VectorField(c,name='tau_u1',bases=s2_basis)
 tau_u2 = d.VectorField(c,name='tau_u2',bases=s2_basis)
@@ -88,9 +87,6 @@ ez['g'][2] =  np.cos(theta)
 
 r_vec =  d.VectorField(c,name='r_vec',bases=b.meridional_basis)
 r_vec['g'][2] = r/r_outer
-
-T_inner = d.Field(name='T_inner',bases=b.S2_basis(r_inner))
-T_inner['g'] = 1.
 
 # initial condition
 amp = 0.1
@@ -123,6 +119,9 @@ problem.add_equation("u(r=r_outer) = 0")
 problem.add_equation("T(r=r_outer) = 0")
 solver = problem.build_solver(ncc_cutoff=1e-10)
 
+# For the sensitivity
+dLdRa = problem.eqs[1]['L'].sym_diff(Rayleigh)
+
 def cost_grad(Rayleigh_,solver,m,target):
     # Solver
     Rayleigh['g'] = Rayleigh_[0]
@@ -148,9 +147,8 @@ def cost_grad(Rayleigh_,solver,m,target):
 
     for adj_state in state_adjoint:
         adj_state['c'] /= np.conj(norm)
-    
-    grad_ = (Ekman*r_vec*T).evaluate()
-    dlambdadRa = np.vdot(state_adjoint[1]['c'],grad_['c'])
+        
+    dlambdadRa = np.vdot(state_adjoint[1]['c'],-dLdRa['c'])
     
     cost = solver.eigenvalues[idx].real**2
     grad_ = 2*solver.eigenvalues[idx].real*dlambdadRa.real
@@ -209,35 +207,42 @@ nev = 1
 logger.info('Saving critical eigenvalue mc={0:d}'.format(mc))
 solver.solve_sparse(subproblem, nev, target,left=True,raise_on_mismatch=True,rebuild_matrices=True)
 
-# Normalise
-
+# Normalise and save eigenvectors
+# Save memory by storing eigenvector using a meridional basis
+um = d.VectorField(c,name='um',bases=b.meridional_basis)
+Tm = d.Field(name='Tm',bases=b.meridional_basis)
 idx = 0
 
 solver.set_state(idx,subproblem.subsystems[0])
-uconj = u.copy()
-uconj['g'] = u['g'].real
-norm = (0.5*d3.integ(uconj@uconj)).evaluate()['g'][0,0,0]
+um['g'][:,0,:,:] = u['g'][:,0,:,:]
+
+ureal = u.copy()
+ureal['g'] = u['g'].real
+norm = (0.5*d3.integ(ureal@ureal)).evaluate()['g'][0,0,0]
 solver.eigenvectors /= np.sqrt(norm)
 
 solver.set_state(idx,subproblem.subsystems[0])
-uconj = u.copy()
-uconj['g'] = u['g'].real
-norm = (0.5*d3.integ(uconj@uconj)).evaluate()['g'][0,0,0]
+um['g'][:,0,:,:] = u['g'][:,0,:,:]
+Tm['g'][0,:,:] = T['g'][0,:,:]
+
+ureal['g'] = u['g'].real
+norm = (0.5*d3.integ(ureal@ureal)).evaluate()['g'][0,0,0]
 
 logger.info('Norm={0:f}'.format(norm.real))
 
 output_evaluator = evaluator.Evaluator(d, locals())
 output_handler = output_evaluator.add_file_handler('{0:s}/eigenvector'.format(file_dir))
-output_handler.add_task(u,name='u')
-output_handler.add_task(T,name='T')
+output_handler.add_task(um,name='um')
+output_handler.add_task(Tm,name='Tm')
 output_evaluator.evaluate_handlers(output_evaluator.handlers, timestep=0, wall_time=0, sim_time=0, iteration=0)
 
 tools._normalize_left_eigenvectors(solver)
-# solver.modified_left_eigenvectors = tools._build_modified_left_eigenvectors(solver)
 tools.set_state_adjoint(solver,idx,subproblem.subsystems[0])
+um['g'][:,0,:,:] = u['g'][:,0,:,:]
+Tm['g'][0,:,:] = T['g'][0,:,:]
 
 output_evaluator_adj = evaluator.Evaluator(d, locals())
 output_handler_adj = output_evaluator_adj.add_file_handler('{0:s}/eigenvector_adj'.format(file_dir))
-output_handler_adj.add_task(u,name='u')
-output_handler_adj.add_task(T,name='T')
+output_handler_adj.add_task(um,name='um')
+output_handler_adj.add_task(Tm,name='Tm')
 output_evaluator_adj.evaluate_handlers(output_evaluator_adj.handlers, timestep=0, wall_time=0, sim_time=0, iteration=0)
