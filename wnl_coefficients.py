@@ -110,10 +110,23 @@ TA = T.copy()
 uAm = um.copy()
 TAm = Tm.copy()
 
+urealm = uAm.copy()
+urealm['g'] = uAm['g'].real
+
+uimagm = uAm.copy()
+uimagm['g'] = uAm['g'].imag
+
 ureal = uA.copy()
 ureal['g'] = uA['g'].real
-norm = (0.5*d3.integ(ureal@ureal)).evaluate()['g'][0,0,0]
+
+norm = 0.5*(0.5*d3.integ(urealm@urealm)+0.5*d3.integ(uimagm@uimagm)).evaluate()['g'][0,0,0]
 logger.info('norm = %f' % norm.real)
+
+e_phi = d.VectorField(c,name='e_phi')
+e_phi['g'][0]=1
+
+e_r = d.VectorField(c,name='e_r')
+e_r['g'][2]=1
 
 if test:
     ## Check energy balance
@@ -144,19 +157,17 @@ uAm_adj = um.copy()
 TAm_adj = Tm.copy()
 
 term = 0
-term += np.vdot(uA_adj['c'],uA['c'])
-term += np.vdot(TA_adj['c'],TA['c'])
+term += np.vdot(uA_adj['c'][:,mc,:,:],uA['c'][:,mc,:,:])
+term += np.vdot(TA_adj['c'][mc,:,:],TA['c'][mc,:,:])
 
 logger.info('Check adjoint normalisation = {0:f}'.format(term))
 
 m_field = d.Field(name='m_field',bases=b.meridional_basis)
 m_field['g'] = 1/(r*np.sin(theta))
 
-e_phi = d.VectorField(c,name='e_phi')
-e_phi['g'][0]=1
-
 NL_u_field = d.VectorField(c,name='NL_u_field',bases=b)
 NL_T_field = d.Field(name='NL_T_field',bases=b)
+
 def NLTerm(u1,u2,T1,T2,m1,m2):
     NL_u = -u1@d3.grad(u2) - u2@d3.grad(u1)
     NL_u += -(e_phi@u1)*(1j*m2*m_field*u2)
@@ -243,10 +254,9 @@ TAA['g'][0,:,:] = T['g'][0,:,:]
 
 logger.info('Computing WNL terms')
 
-
 NLTerm(uAA,uAbar,TAA,TAbar,2*mc,-mc)
-gamma_AA_u = np.vdot(uA_adj['c'],-NL_u_field['c'])
-gamma_AA_T = np.vdot(TA_adj['c'],-NL_T_field['c'])
+gamma_AA_u = np.vdot(uA_adj['c'][:,mc,:,:],-NL_u_field['c'][:,mc,:,:])
+gamma_AA_T = np.vdot(TA_adj['c'][mc,:,:],-NL_T_field['c'][mc,:,:])
 gamma_AA = gamma_AA_u + gamma_AA_T
 logger.info('gamma_AA={0:g}'.format(gamma_AA))
 
@@ -256,8 +266,8 @@ gamma_u_AA['g'][:,0,:,:] = (-NL_u_field).evaluate()['g'][:,0,:,:]
 gamma_T_AA['g'][0,:,:]  = (-NL_T_field).evaluate()['g'][0,:,:]
 
 NLTerm(uAAbar,uAm,TAAbar,TAm,0,1.*mc)
-gamma_AAbar_u = np.vdot(uA_adj['c'],-NL_u_field['c'])
-gamma_AAbar_T = np.vdot(TA_adj['c'],-NL_T_field['c'])
+gamma_AAbar_u = np.vdot(uA_adj['c'][:,mc,:,:],-NL_u_field['c'][:,mc,:,:])
+gamma_AAbar_T = np.vdot(TA_adj['c'][mc,:,:],-NL_T_field['c'][mc,:,:])
 gamma_AAbar = gamma_AAbar_u + gamma_AAbar_T 
 logger.info('gamma_AAbar={0:g}'.format(gamma_AAbar))
 
@@ -274,7 +284,7 @@ chi_u_m = um.copy()
 
 chi_u_m['g'] = (Rayleigh*Ekman*r_vec*TAm).evaluate()['g']
 chi_u['g'] = chi_u_m['g']*np.exp(1j*mc*phi)
-chi = np.vdot(uA_adj['c'],chi_u['c'])
+chi = np.vdot(uA_adj['c'][:,mc,:,:],chi_u['c'][:,mc,:,:])
 logger.info('chi={0:g}'.format(chi))
 
 logger.info('Amplitude={0:g}'.format(np.sqrt(chi.real/gamma.real)))
