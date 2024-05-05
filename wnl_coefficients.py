@@ -10,12 +10,12 @@ Options:
     --Ekman=<Ekman>               Ekman number [default: 1e-3]
     --Prandtl=<Prandtl>           Prandtl number [default: 1]
     --beta=<beta>                 Radius ratio [default: 0.35]
-    --test                        Whether to do the residual test or not
+    --test                        Test 2.5D calculation with full 3D residual calculation (expensive!)
 """
 
 import numpy as np
 import dedalus.public as d3
-
+import time
 import h5py
 import logging
 import dedalus.core.evaluator as evaluator
@@ -91,7 +91,7 @@ rvec = d.VectorField(c, name='er', bases=b.meridional_basis)
 rvec['g'][2] = r
 
 lift_basis = b.clone_with(k=1) # First derivative basis
-lift = lambda A, n: d3.Lift(A, lift_basis, n)
+lift  = lambda A, n: d3.Lift(A, lift_basis, n)
 integ = lambda A: d3.Integrate(A, c)
 grad_u = d3.grad(u) + rvec*lift(tau_u1,-1) # First-order reduction
 grad_T = d3.grad(T) + rvec*lift(tau_T1,-1) # First-order reduction
@@ -119,25 +119,59 @@ uimagm['g'] = uAm['g'].imag
 ureal = uA.copy()
 ureal['g'] = uA['g'].real
 
-norm = 0.5*(0.5*d3.integ(urealm@urealm)+0.5*d3.integ(uimagm@uimagm)).evaluate()['g'][0,0,0]
+norm = 0.5*(0.5*d3.integ(urealm@urealm + uimagm@uimagm)).evaluate()['g'][0,0,0]
 logger.info('norm = %f' % norm.real)
 
 e_phi = d.VectorField(c,name='e_phi')
 e_phi['g'][0]=1
 
+e_theta = d.VectorField(c,name='e_theta')
+e_theta['g'][1]=1
+
 e_r = d.VectorField(c,name='e_r')
 e_r['g'][2]=1
 
+m_field = d.Field(name='m_field',bases=b.meridional_basis)
+m_field['g'] = 1/(r*np.sin(theta))
+
+curlm = lambda A, m: d3.curl(A) - e_r*(1j*m*m_field*e_theta@A) + e_theta*(1j*m*m_field*e_r@A)
+lapm  = lambda A, m: -curlm(curlm(A,m),m)
+
+e_r_phi = d.TensorField((c,c),name='e_r_phi')
+e_r_phi['g'][2,0] = 1
+e_theta_phi = d.TensorField((c,c),name='e_theta_phi')
+e_theta_phi['g'][1,0] = 1
+e_phi_phi = d.TensorField((c,c),name='e_phi_phi')
+e_phi_phi['g'][0,0] = 1
+
+gradm = lambda A,m: d3.grad(A) + m_field*1j*m*(e_r_phi*A@e_r + e_theta_phi*A@e_theta + e_phi_phi*A@e_phi )
 if test:
-    ## Check energy balance
+    ## Check energy balance (3D calculation)
     D_nu = np.max(d3.integ(d3.dot(ureal,d3.lap(ureal))).evaluate()['g'])
+    print(D_nu)
     strain = 0.5*(d3.grad(ureal) + d3.trans(d3.grad(ureal)))
     De = 2*np.max(d3.integ(d3.trace(strain@strain)).evaluate()['g'])
+    print(De)
     residual = np.abs(D_nu+De)/np.max([np.abs(De),np.abs(D_nu)])
-    logger.info('Residual = {0:g}'.format(residual))
-else:
-    # Complex placeholder until this calculation is run
-    residual = None
+    logger.info('Residual_3D = {0:g}'.format(residual))
+
+## Check energy balance
+lap_term = lapm(um,mc).evaluate()
+lap_real = urealm.copy()
+lap_real['g'] = lap_term['g'].real
+
+lap_imag = uimagm.copy()
+lap_imag['g'] = lap_term['g'].imag
+D_nu = np.max(0.5*d3.integ(urealm@lap_real + uimagm@lap_imag).evaluate()['g'])
+
+strain = 0.5*(gradm(um,mc) + d3.trans(gradm(um,mc))).evaluate()
+strain_real = d.TensorField((c,c),name='strain_real',bases=b)
+strain_real['g'] = strain['g'].real
+strain_imag = d.TensorField((c,c),name='strain_imag',bases=b)
+strain_imag['g'] = strain['g'].imag
+De = 2*np.max(0.5*d3.integ(d3.trace(strain_real@strain_real) + d3.trace(strain_imag@strain_imag)).evaluate()['g'])
+residual = np.abs(D_nu+De)/np.max([np.abs(De),np.abs(D_nu)])
+logger.info('Residual = {0:g}'.format(residual))
 
 uAbar = uAm.copy()
 uAbar['g'] = np.conj(uAm['g'])
@@ -162,8 +196,7 @@ term += np.vdot(TA_adj['c'][mc,:,:],TA['c'][mc,:,:])
 
 logger.info('Check adjoint normalisation = {0:f}'.format(term))
 
-m_field = d.Field(name='m_field',bases=b.meridional_basis)
-m_field['g'] = 1/(r*np.sin(theta))
+
 
 NL_u_field = d.VectorField(c,name='NL_u_field',bases=b)
 NL_T_field = d.Field(name='NL_T_field',bases=b)
