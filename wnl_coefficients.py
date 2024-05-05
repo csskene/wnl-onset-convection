@@ -330,6 +330,7 @@ logger.info('chi={0:g}'.format(chi))
 
 logger.info('Amplitude={0:g}'.format(np.sqrt(chi.real/gamma.real)))
 logger.info('Total time taken={0:g}'.format(time.time()-ts))
+
 ################
 ## Save terms ##
 ################
@@ -350,8 +351,8 @@ output_handler.add_task(gamma_T_AAbar,name='gamma_T_AAbar')
 
 output_handler.add_task(chi_u_m,name='chi_u')
 output_evaluator.evaluate_handlers(output_evaluator.handlers, timestep=0, wall_time=0, sim_time=0, iteration=0)
-columns = ['gamma','gamma_AA','gamma_AA_u','gamma_AA_T','gamma_AAbar','gamma_AAbar_u','gamma_AAbar_T','chi','eig','residual','mc','internal']
-data = [gamma,gamma_AA,gamma_AA_u,gamma_AA_T,gamma_AAbar,gamma_AAbar_u,gamma_AAbar_T,chi,np.squeeze(data['eigs'][idx]),residual,mc,internal]
+columns = ['gamma','gamma_AA','gamma_AA_u','gamma_AA_T','gamma_AAbar','gamma_AAbar_u','gamma_AAbar_T','chi','eig','residual','beta','Prandtl','mc','internal']
+data = [gamma,gamma_AA,gamma_AA_u,gamma_AA_T,gamma_AAbar,gamma_AAbar_u,gamma_AAbar_T,chi,np.squeeze(data['eigs'][idx]),residual,beta,Prandtl,mc,internal]
 frame_data = dict(zip(columns,data))
 
 df = pd.DataFrame(data=frame_data,index=[Ekman])
