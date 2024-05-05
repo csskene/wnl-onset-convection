@@ -11,6 +11,7 @@ Options:
     --Prandtl=<Prandtl>           Prandtl number [default: 1]
     --beta=<beta>                 Radius ratio [default: 0.35]
     --test                        Test 2.5D calculation with full 3D residual calculation (expensive!)
+    --internal                    Whether to use internal heating or not
 """
 
 import numpy as np
@@ -34,10 +35,12 @@ test             = args['--test']
 
 beta =  float(args['--beta'])
 
+internal = args['--internal']
+
 r_outer = 1/(1-beta)
 r_inner = r_outer - 1
 
-file_dir = 'data/Ekman_{0:g}_Prandtl_{1:g}_beta_{2:g}'.format(Ekman,Prandtl,beta)
+file_dir = 'data/Ekman_{0:g}_Prandtl_{1:g}_beta_{2:g}_internal_{3:s}'.format(Ekman,Prandtl,beta,str(internal))
 
 data = np.load('{0:s}/results.npz'.format(file_dir))
 
@@ -50,6 +53,8 @@ logger.info('Calculating coefficients for mc={0:d}, Ra={1:f}, om_A={2:f}'.format
 radii = (r_inner,r_outer)
 
 vol = 4*np.pi/3*(r_outer**3-r_inner**3)
+
+ts = time.time()
 
 c = d3.SphericalCoordinates('phi', 'theta', 'r')
 d = d3.Distributor((c,), dtype=np.complex128)
@@ -83,9 +88,12 @@ r_vec =  d.VectorField(c,name='r_vec',bases=b.meridional_basis)
 r_vec['g'][2] = r/r_outer
 
 # initial condition
-amp = 0.1
-x = 2*r-r_inner-r_outer
-T0['g'] = r_inner*r_outer/r - r_inner
+if internal:
+    logger.info("Using internal heating")
+    T0['g'] = -(1-beta)/(1+beta)*r**2 + (1-beta)/(1+beta)*r_outer**2
+else:
+    logger.info("Using differential heating")
+    T0['g'] = r_inner*r_outer/r - r_inner
 
 rvec = d.VectorField(c, name='er', bases=b.meridional_basis)
 rvec['g'][2] = r
@@ -99,9 +107,9 @@ grad_T = d3.grad(T) + rvec*lift(tau_T1,-1) # First-order reduction
 um = d.VectorField(c,name='um',bases=b.meridional_basis)
 Tm = d.Field(name='Tm',bases=b.meridional_basis)
 
-with h5py.File('{0:s}/eigenvector/eigenvector_s1.h5'.format(file_dir), mode='r') as file:
+with h5py.File('{0:s}/eigenvector/eigenvector_s1.h5'.format(file_dir), mode='r') as input_file:
     for state_variable in [um,Tm]:
-        state_variable.load_from_hdf5(file,-1)
+        state_variable.load_from_hdf5(input_file,-1)
 
 u['g'] = um['g']*np.exp(1j*mc*phi)
 T['g'] = Tm['g']*np.exp(1j*mc*phi)
@@ -179,9 +187,9 @@ uAbar['g'] = np.conj(uAm['g'])
 TAbar = TAm.copy()
 TAbar['g'] = np.conj(TAm['g'])
 
-with h5py.File('{0:s}/eigenvector_adj/eigenvector_adj_s1.h5'.format(file_dir), mode='r') as file:
+with h5py.File('{0:s}/eigenvector_adj/eigenvector_adj_s1.h5'.format(file_dir), mode='r') as input_file:
     for state_variable in [um,Tm]:
-        state_variable.load_from_hdf5(file,-1)
+        state_variable.load_from_hdf5(input_file,-1)
 
 u['g'] = um['g']*np.exp(1j*mc*phi)
 T['g'] = Tm['g']*np.exp(1j*mc*phi)
@@ -321,7 +329,7 @@ chi = np.vdot(uA_adj['c'][:,mc,:,:],chi_u['c'][:,mc,:,:])
 logger.info('chi={0:g}'.format(chi))
 
 logger.info('Amplitude={0:g}'.format(np.sqrt(chi.real/gamma.real)))
-
+logger.info('Total time taken={0:g}'.format(time.time()-ts))
 ################
 ## Save terms ##
 ################
@@ -342,8 +350,8 @@ output_handler.add_task(gamma_T_AAbar,name='gamma_T_AAbar')
 
 output_handler.add_task(chi_u_m,name='chi_u')
 output_evaluator.evaluate_handlers(output_evaluator.handlers, timestep=0, wall_time=0, sim_time=0, iteration=0)
-columns = ['gamma','gamma_AA','gamma_AA_u','gamma_AA_T','gamma_AAbar','gamma_AAbar_u','gamma_AAbar_T','chi','residual']
-data = [gamma,gamma_AA,gamma_AA_u,gamma_AA_T,gamma_AAbar,gamma_AAbar_u,gamma_AAbar_T,chi,residual]
+columns = ['gamma','gamma_AA','gamma_AA_u','gamma_AA_T','gamma_AAbar','gamma_AAbar_u','gamma_AAbar_T','chi','eig','residual','mc','internal']
+data = [gamma,gamma_AA,gamma_AA_u,gamma_AA_T,gamma_AAbar,gamma_AAbar_u,gamma_AAbar_T,chi,np.squeeze(data['eigs'][idx]),residual,mc,internal]
 frame_data = dict(zip(columns,data))
 
 df = pd.DataFrame(data=frame_data,index=[Ekman])

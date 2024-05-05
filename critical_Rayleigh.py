@@ -14,6 +14,8 @@ Options:
     --target=<target>             Target frequency [default: -0.2]
     --Prandtl=<Prandtl>           Prandtl number [default: 1]
     --beta=<beta>                 Radius ratio [default: 0.35]
+    --internal                    Whether to use internal heating or not
+    --recalculate                 Just recalculate the eigenvector
 """
 
 import numpy as np
@@ -45,6 +47,9 @@ target       = float(args['--target'])*1j
 Prandtl =  float(args['--Prandtl'])
 beta    =  float(args['--beta'])
 
+internal = args['--internal']
+recalculate = args['--recalculate']
+
 r_outer = 1/(1-beta)
 r_inner = r_outer - 1
 radii = (r_inner,r_outer)
@@ -55,7 +60,7 @@ if not os.path.exists('data'):
     os.mkdir('data')
 
 # Create output directory
-file_dir = 'data/Ekman_{0:g}_Prandtl_{1:g}_beta_{2:g}'.format(Ekman,Prandtl,beta)
+file_dir = 'data/Ekman_{0:g}_Prandtl_{1:g}_beta_{2:g}_internal_{3:s}'.format(Ekman,Prandtl,beta,str(internal))
 if not os.path.exists(file_dir):
     os.mkdir(file_dir)
 
@@ -92,9 +97,12 @@ r_vec =  d.VectorField(c,name='r_vec',bases=b.meridional_basis)
 r_vec['g'][2] = r/r_outer
 
 # initial condition
-amp = 0.1
-x = 2*r-r_inner-r_outer
-T0['g'] = r_inner*r_outer/r - r_inner
+if internal:
+    logger.info("Using internal heating")
+    T0['g'] = -(1-beta)/(1+beta)*r**2 + (1-beta)/(1+beta)*r_outer**2
+else:
+    logger.info("Using differential heating")
+    T0['g'] = r_inner*r_outer/r - r_inner
 
 rvec = d.VectorField(c, name='er', bases=b.meridional_basis)
 rvec['g'][2] = r
@@ -161,42 +169,49 @@ def cost_grad(Rayleigh_,solver,m,target):
     eig_save['g'] = solver.eigenvalues[idx]
     return cost, grad_
 
-Ra_cs = []
-ms    = []
-eigs  = []
+if not recalculate:
+    Ra_cs = []
+    ms    = []
+    eigs  = []
 
-for m in range(m_min,m_max+1):
-    logger.info('Looking for m={0:d}'.format(m))
-    growth = -1
-    # Loop to find positive growth rate
-    while(growth<0):
-        Rayleigh['g'] = Rayleigh_ 
-        
-        subproblem = solver.subproblems_by_group[(m, None, None)]
-        nev = 40
-        solver.solve_sparse(subproblem, nev, target,rebuild_matrices=True)
-        idx = np.argmax(solver.eigenvalues.real)
-        growth = solver.eigenvalues[idx].real
-        freq = solver.eigenvalues[idx].imag
-        target = solver.eigenvalues[idx]
-        logger.info('Ra ={0:g}, Growth= {1:g}, freq = {2:g}'.format(Rayleigh_,growth,freq))
-        Rayleigh_ *= 1.1
-    Rayleigh_ /= 1.1
-    opts = {'disp': True}
+    for m in range(m_min,m_max+1):
+        logger.info('Looking for m={0:d}'.format(m))
+        growth = -1
+        # Loop to find positive growth rate
+        while(growth<0):
+            Rayleigh['g'] = Rayleigh_ 
+            
+            subproblem = solver.subproblems_by_group[(m, None, None)]
+            nev = 40
+            solver.solve_sparse(subproblem, nev, target,rebuild_matrices=True)
+            idx = np.argmax(solver.eigenvalues.real)
+            growth = solver.eigenvalues[idx].real
+            freq = solver.eigenvalues[idx].imag
+            target = solver.eigenvalues[idx]
+            logger.info('Ra ={0:g}, Growth= {1:g}, freq = {2:g}'.format(Rayleigh_,growth,freq))
+            Rayleigh_ *= 1.1
+        Rayleigh_ /= 1.1
+        opts = {'disp': True}
 
-    # Now optimise to find critical Rayleigh
-    sol = scipy.optimize.minimize(lambda A: cost_grad(A,solver,m,target), x0 = np.array(Rayleigh_),jac=True,method='L-BFGS-B',tol=1e-28,options=opts)
-    logger.info('Ra_c = {0:g}'.format(sol.x[0]))
-    logger.info('Number of function evaluations = {0:d}'.format(sol.nfev))
+        # Now optimise to find critical Rayleigh
+        sol = scipy.optimize.minimize(lambda A: cost_grad(A,solver,m,target), x0 = np.array(Rayleigh_),jac=True,method='L-BFGS-B',tol=1e-28,options=opts)
+        logger.info('Ra_c = {0:g}'.format(sol.x[0]))
+        logger.info('Number of function evaluations = {0:d}'.format(sol.nfev))
 
-    Ra_cs.append(sol.x[0])
-    ms.append(m)
-    eigs.append(copy.copy(eig_save['g']))
+        Ra_cs.append(sol.x[0])
+        ms.append(m)
+        eigs.append(copy.copy(eig_save['g']))
 
-    Rayleigh_ = sol.x[0]
-    target = copy.copy(eig_save['g'][0,0,0])
+        Rayleigh_ = sol.x[0]
+        target = copy.copy(eig_save['g'][0,0,0])
 
-    np.savez('{0:s}/results'.format(file_dir),ms=ms,Ra=Ra_cs,eigs = eigs)
+        np.savez('{0:s}/results'.format(file_dir),ms=ms,Ra=Ra_cs,eigs = eigs)
+else:
+    logger.info('Recalculating the critical eigenvector from previous run')
+    saved_data = np.load('{0:s}/results.npz'.format(file_dir))
+    Ra_cs = saved_data['Ra']
+    ms    = saved_data['ms']
+    eigs  = saved_data['eigs']
 
 idx = np.argmin(Ra_cs)
 
@@ -219,17 +234,22 @@ idx = 0
 solver.set_state(idx,subproblem.subsystems[0])
 um['g'][:,0,:,:] = u['g'][:,0,:,:]
 
-ureal = u.copy()
-ureal['g'] = u['g'].real
-norm = (0.5*d3.integ(ureal@ureal)).evaluate()['g'][0,0,0]
+umreal = um.copy()
+umreal['g'] = um['g'].real
+
+umimag = um.copy()
+umimag['g'] = um['g'].imag
+
+norm = (0.5*0.5*d3.integ(umreal@umreal + umimag@umimag)).evaluate()['g'][0,0,0]
 solver.eigenvectors /= np.sqrt(norm)
 
 solver.set_state(idx,subproblem.subsystems[0])
 um['g'][:,0,:,:] = u['g'][:,0,:,:]
 Tm['g'][0,:,:] = T['g'][0,:,:]
 
-ureal['g'] = u['g'].real
-norm = (0.5*d3.integ(ureal@ureal)).evaluate()['g'][0,0,0]
+umreal['g'] = um['g'].real
+umimag['g'] = um['g'].imag
+norm = (0.5*0.5*d3.integ(umreal@umreal + umimag@umimag)).evaluate()['g'][0,0,0]
 
 logger.info('Norm={0:f}'.format(norm.real))
 
