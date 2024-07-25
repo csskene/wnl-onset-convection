@@ -206,12 +206,22 @@ if not recalculate:
         target = copy.copy(eig_save['g'][0,0,0])
 
         np.savez('{0:s}/results'.format(file_dir),ms=ms,Ra=Ra_cs,eigs = eigs)
+        flg_saved = True
 else:
     logger.info('Recalculating the critical eigenvector from previous run')
-    saved_data = np.load('{0:s}/results.npz'.format(file_dir))
-    Ra_cs = saved_data['Ra']
-    ms    = saved_data['ms']
-    eigs  = saved_data['eigs']
+    try:
+        saved_data = np.load('{0:s}/results.npz'.format(file_dir))
+        Ra_cs = saved_data['Ra']
+        ms    = saved_data['ms']
+        eigs  = saved_data['eigs']
+        flg_saved = True
+    except:
+        logger.info('No previous run detected, using input parameters')
+        Ra_cs = [Rayleigh_]
+        ms = [m_min]
+        eig_save['g'] = target
+        eigs = [eig_save['g']]
+        flg_saved = False
 
 idx = np.argmin(Ra_cs)
 
@@ -269,3 +279,7 @@ output_handler_adj = output_evaluator_adj.add_file_handler('{0:s}/eigenvector_ad
 output_handler_adj.add_task(um,name='um')
 output_handler_adj.add_task(Tm,name='Tm')
 output_evaluator_adj.evaluate_handlers(output_evaluator_adj.handlers, timestep=0, wall_time=0, sim_time=0, iteration=0)
+
+if not flg_saved:
+    eig_save['g'] = solver.eigenvalues[0] 
+    np.savez('{0:s}/results'.format(file_dir),ms=ms,Ra=Ra_cs,eigs = [eig_save['g']])
