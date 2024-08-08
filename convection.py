@@ -8,20 +8,21 @@ Options:
     --Lmax=<Lmax>                 Lmax resolution for simulation [default: 43]
     --Nmax=<Nmax>                 Nmax resolution for simulation [default: 48]
     --Ekman=<Ekman>               Ekman number [default: 1e-3]
+    --Prandtl=<Prandtl>           Prandtl number [default: 1]
+    --beta=<beta>                 Radius ratio [default: 0.35]
+    --internal                    Whether to use internal heating or not
     --eps=<eps>                   How far away from criticaility [default: 0.1]
 """
 
 import numpy as np
 import dedalus.public as d3
 import os 
-from pathlib import Path
 import h5py
 import pandas as pd
 
 from dedalus.extras.flow_tools import GlobalArrayReducer
 
 from mpi4py import MPI
-import time
 
 import logging
 
@@ -47,10 +48,12 @@ mesh = factors[np.argmax(score)]
 Lmax   = int(args['--Lmax'])
 Nmax   = int(args['--Nmax'])
 Ekman  = float(args['--Ekman'])
+Prandtl =  float(args['--Prandtl'])
+beta    =  float(args['--beta'])
+internal = args['--internal']
 eps    = float(args['--eps'])
-Prandtl = 1
 
-file_dir = 'Ekman_{0:g}'.format(Ekman)
+file_dir = 'data/Ekman_{0:g}_Prandtl_{1:g}_beta_{2:g}_internal_{3:s}'.format(Ekman, Prandtl, beta, str(internal))
 
 data = np.load('{0:s}/results.npz'.format(file_dir))
 
@@ -60,58 +63,56 @@ Rayleigh = data['Ra'][idx]*(1+eps**2)
 
 stop_time = 100000
 
-r_inner = 7/13
-r_outer = 20/13
-radii = (r_inner,r_outer)
+r_outer = 1/(1-beta)
+r_inner = r_outer - 1
+radii = (r_inner, r_outer)
 
 c = d3.SphericalCoordinates('phi', 'theta', 'r')
 
-d = d3.Distributor((c,), mesh=mesh,dtype=np.float64)
+d = d3.Distributor((c,), mesh=mesh, dtype=np.float64)
 b = d3.ShellBasis(c, (2*(Lmax+1),Lmax+1,Nmax+1), radii=radii, dealias=(3/2,3/2,3/2),dtype=np.float64)
 
 s2_basis = b.S2_basis()
 bk1 = b.clone_with(k=1)
 
-phi, theta, r = b.local_grids()
-phig,thetag,rg= b.global_grids()
+phi, theta, r = d.local_grids(b)
 
-u = d.VectorField(c,name='u',bases=b)
-p = d.Field(name='p',bases=bk1)
-φ = d.Field(name='φ',bases=bk1)
-T = d.Field(name='T',bases=b)
+u = d.VectorField(c,name='u', bases=b)
+p = d.Field(name='p', bases=bk1)
+φ = d.Field(name='φ', bases=bk1)
+T = d.Field(name='T', bases=b)
 
-tau_u1 = d.VectorField(c,name='tau_u1',bases=s2_basis)
-tau_u2 = d.VectorField(c,name='tau_u2',bases=s2_basis)
+tau_u1 = d.VectorField(c,name='tau_u1', bases=s2_basis)
+tau_u2 = d.VectorField(c,name='tau_u2', bases=s2_basis)
 tau_p = d.Field(name='tau_p')
 tau_phi = d.Field(name='tau_phi')
 
-tau_T1 = d.Field(name='tau_T1',bases=s2_basis)
-tau_T2 = d.Field(name='tau_T2',bases=s2_basis)
+tau_T1 = d.Field(name='tau_T1', bases=s2_basis)
+tau_T2 = d.Field(name='tau_T2', bases=s2_basis)
 
-ez = d.VectorField(c,name='ez',bases=b)
+ez = d.VectorField(c,name='ez', bases=b)
 ez['g'][1] = -np.sin(theta)
 ez['g'][2] =  np.cos(theta)
 
-ro_vec =  d.VectorField(c,name='r_vec',bases=b.radial_basis)
+ro_vec =  d.VectorField(c,name='r_vec', bases=b.radial_basis)
 ro_vec['g'][2] = r/r_outer
 
 ## initial condition (Load from file) ##
-d_complex = d3.Distributor((c,), mesh=mesh,dtype=np.complex128)
-b_complex = d3.ShellBasis(c, (2*(Lmax+1),Lmax+1,Nmax+1), radii=radii, dealias=(3/2,3/2,3/2),dtype=np.complex128)
+d_complex = d3.Distributor((c,), mesh=mesh, dtype=np.complex128)
+b_complex = d3.ShellBasis(c, (2*(Lmax+1), Lmax+1, Nmax+1), radii=radii, dealias=(3/2,3/2,3/2), dtype=np.complex128)
 
-uA = d_complex.VectorField(c,name='u',bases=b_complex)
-TA = d_complex.Field(name='T',bases=b_complex)
+uA = d_complex.VectorField(c,name='um', bases=b_complex.meridional_basis)
+TA = d_complex.Field(name='Tm', bases=b_complex.meridional_basis)
 with h5py.File('{0:s}/eigenvector/eigenvector_s1.h5'.format(file_dir), mode='r') as file:
-    uA.load_from_hdf5(file,-1)
-    TA.load_from_hdf5(file,-1)
+    uA.load_from_hdf5(file, -1)
+    TA.load_from_hdf5(file, -1)
 
 uA.change_scales(1)
 TA.change_scales(1)
-u['g'] = uA['g'].real
-T['g'] = TA['g'].real
+u['g'] = (uA['g']*np.exp(1j*mc*phi)).real
+T['g'] = (TA['g']*np.exp(1j*mc*phi)).real
 
-df = pd.read_csv('{0:s}/wnl_coefficients.csv'.format(file_dir), index_col=0, header=None).T
-
+df = pd.read_csv('{0:s}/wnl_coefficients.csv'.format(file_dir), index_col=0)
 chi   = np.complex128(df['chi'])[0]
 gamma = np.complex128(df['gamma_AA'])[0] + np.complex128(df['gamma_AAbar'])[0]
 predicted_amplitude = 4*eps**2*chi.real/gamma.real
@@ -122,6 +123,13 @@ reducer = GlobalArrayReducer(MPI.COMM_WORLD)
 norm = reducer.global_max((0.5*d3.integ(u@u)).evaluate()['g'])
 u['g'] /= np.sqrt(norm/(0.1*predicted_amplitude))
 T['g'] /= np.sqrt(norm/(0.1*predicted_amplitude))
+# Conducting state
+if internal:
+    logger.info("Using internal heating")
+    T['g'] += -(1-beta)/(1+beta)*r**2 + (1-beta)/(1+beta)*r_outer**2
+else:
+    logger.info("Using differential heating")
+    T['g'] += r_inner*r_outer/r - r_inner
 norm = reducer.global_max((0.5*d3.integ(u@u)).evaluate()['g'])
 logger.info('norm = %g' % norm.real )
 ########################################
@@ -134,7 +142,7 @@ grad_u = d3.grad(u) + rvec*lift(tau_u1,-1) # First-order reduction
 grad_T = d3.grad(T) + rvec*lift(tau_T1,-1) # First-order reduction
 
 # Hydro only
-problem = d3.IVP([p, u, T, tau_u1,tau_u2,tau_T1,tau_T2,tau_p], namespace=locals())
+problem = d3.IVP([p, u, T, tau_u1, tau_u2, tau_T1, tau_T2, tau_p], namespace=locals())
 problem.add_equation("trace(grad_u) + tau_p = 0")
 problem.add_equation("dt(u) - Ekman*div(grad_u) + grad(p) + lift(tau_u2,-1) = cross(u, curl(u) + 2*ez) + Rayleigh*Ekman*ro_vec*T")
 problem.add_equation("dt(T) - Ekman/Prandtl*div(grad_T) + lift(tau_T2,-1) = - dot(u,grad(T))")
@@ -162,10 +170,10 @@ CFL.add_velocity(u)
 file_name='verification_eps_{0:.2f}'.format(eps)
 
 if MPI.COMM_WORLD.rank == 0:
-    if not os.path.exists(os.path.join(file_dir,file_name)):
-        os.mkdir(os.path.join(file_dir,file_name))
-timeseries = solver.evaluator.add_file_handler(os.path.join(file_dir,file_name,'timeseries'),sim_dt=2e-7)
-timeseries.add_task(d3.integ(d3.dot(u,u))/2,name='KE')
+    if not os.path.exists(os.path.join(file_dir, file_name)):
+        os.mkdir(os.path.join(file_dir, file_name))
+timeseries = solver.evaluator.add_file_handler(os.path.join(file_dir, file_name,'timeseries'), sim_dt=2e-7)
+timeseries.add_task(d3.integ(d3.dot(u,u))/2, name='KE')
 
 good_solution = True
 

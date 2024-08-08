@@ -1,3 +1,6 @@
+"""
+Functions for accessing and manipulating adjoint eigenvectors
+"""
 import numpy as np
 
 def set_state_adjoint(self, index, subsystem):
