@@ -339,10 +339,10 @@ output_evaluator = evaluator.Evaluator(d, locals())
 output_handler = output_evaluator.add_file_handler('{0:s}/wnl_terms'.format(file_dir))
 
 output_handler.add_task(uAA,name='uAA')
-output_handler.add_task(uAA,name='TAA')
+output_handler.add_task(TAA,name='TAA')
 
 output_handler.add_task(uAAbar,name='uAAbar')
-output_handler.add_task(uAAbar,name='TAAbar')
+output_handler.add_task(TAAbar,name='TAAbar')
 
 output_handler.add_task(gamma_u_AA,name='gamma_u_AA')
 output_handler.add_task(gamma_T_AA,name='gamma_T_AA')
