@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/667766241.svg)](https://zenodo.org/doi/10.5281/zenodo.13284472)
+
 # Weakly nonlinear analysis of the onset of convection in rotating spherical shells
 
 This repository contains companion code for the paper 'Weakly nonlinear analysis of the onset of convection in rotating spherical shells' by C. S. Skene and S. M. Tobias (in review).
