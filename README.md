@@ -2,7 +2,7 @@
 
 # Weakly nonlinear analysis of the onset of convection in rotating spherical shells
 
-This repository contains companion code for the paper 'Weakly nonlinear analysis of the onset of convection in rotating spherical shells' by C. S. Skene and S. M. Tobias (in review). A preprint is available [here](https://arxiv.org/abs/2408.15603).
+This repository contains companion code for the paper 'Weakly nonlinear analysis of the onset of convection in rotating spherical shells' by C. S. Skene and S. M. Tobias, [Geophysical & Astrophysical Fluid Dynamics, 2024](https://doi.org/10.1080/03091929.2024.2439478).
 
 ## Available code
 1. *critical_Rayleigh.py* finds the critical Rayleigh number for the onset of convection using optimisation techniques.
@@ -13,15 +13,16 @@ This repository contains companion code for the paper 'Weakly nonlinear analysis
 ## Citation
 If this code is useful for your research, please cite
 ```
- @misc{skene2024,
-    title={Weakly nonlinear analysis of the onset of convection in rotating spherical shells}, 
-    author={Skene, Calum S. and Tobias, Steven M.},
-    year={2024},
-    eprint={2408.15603},
-    archivePrefix={arXiv},
-    primaryClass={physics.flu-dyn},
-    url={https://arxiv.org/abs/2408.15603}, 
- }
+@article{skene_tobias_2024,
+    author = {Calum S. Skene and Steven M. Tobias},
+    title = {Weakly nonlinear analysis of the onset of convection in rotating spherical shells},
+    journal = {Geophysical \& Astrophysical Fluid Dynamics},
+    volume = {0},
+    number = {0},
+    pages = {1--22},
+    year = {2024},
+    publisher = {Taylor \& Francis}
+}
 ```
 
 ## Acknowledgements
